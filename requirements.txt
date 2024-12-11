@@ -1,0 +1,5 @@
+flask
+whisper
+python-docx
+ffmpeg-python
+torch

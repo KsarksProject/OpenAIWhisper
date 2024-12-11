@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Транскрибация видео</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        #result-container {
+            margin-top: 20px;
+        }
+
+        #result-text, #metadata {
+            text-align: left;
+            margin: 20px auto;
+            max-width: 80%;
+            font-size: 16px;
+            line-height: 1.5;
+            background: #fff;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .button-container {
+            margin-top: 20px;
+        }
+
+        #download-btn, #copy-btn {
+            margin-left: 10px;
+            display: none;
+        }
+
+        #progress-bar {
+            width: 80%;
+            margin: 20px auto;
+            background-color: #ddd;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        #progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background-color: #4caf50;
+            text-align: center;
+            color: white;
+            line-height: 20px;
+            font-size: 14px;
+            transition: width 0.2s;
+        }
+
+        .info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        h1 {
+            color: #444;
+        }
+    </style>
+</head>
+<body>
+    <h1>Загрузите видео для транскрибации</h1>
+    <form id="upload-form" style="display: flex; justify-content: center; gap: 10px;">
+        <input type="file" id="file-input" required>
+        <button type="submit">Отправить</button>
+        <button id="download-btn" type="button" style="display: none;">Скачать как .txt</button>
+        <button id="copy-btn" type="button" style="display: none;">Скопировать в буфер</button>
+    </form>
+
+    <div id="progress-bar">
+        <div id="progress-bar-fill">0%</div>
+    </div>
+
+    <div id="result-container" style="display: none;">
+        <h2>Результат транскрибации</h2>
+        <div id="metadata">
+            <h3>Информация о видео:</h3>
+            <p>Длительность: <span id="video-duration"></span> секунд</p>
+            <p>Размер: <span id="video-size"></span> МБ</p>
+            <p>Битрейт: <span id="video-bitrate"></span> Кбит/с</p>
+            <p>Формат: <span id="video-format"></span></p>
+        </div>
+        <div id="result-text"></div>
+        <p class="info" id="transcription-time"></p>
+    </div>
+
+    <script>
+        let transcribedText = ""; // Глобальная переменная для сохранения текста
+
+        document.getElementById("upload-form").addEventListener("submit", function (e) {
+            e.preventDefault(); // Предотвращаем стандартное поведение формы
+
+            const fileInput = document.getElementById("file-input");
+            if (!fileInput.files[0]) {
+                alert("Пожалуйста, выберите файл");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            const xhr = new XMLHttpRequest();
+
+            // Показываем прогрессбар
+            const progressBar = document.getElementById("progress-bar");
+            const progressBarFill = document.getElementById("progress-bar-fill");
+            progressBar.style.display = "block";
+
+            xhr.upload.onprogress = function (event) {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 100);
+                    progressBarFill.style.width = percentComplete + "%";
+                    progressBarFill.textContent = percentComplete + "%";
+                }
+            };
+
+            const startTime = new Date(); // Засекаем время начала
+
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    progressBar.style.display = "none"; // Скрываем прогрессбар
+
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+
+                        // Показать результат
+                        document.getElementById("result-container").style.display = "block";
+                        document.getElementById("result-text").textContent = response.text;
+
+                        // Отобразить метаданные видео
+                        document.getElementById("video-duration").textContent = response.video_metadata.duration;
+                        document.getElementById("video-size").textContent = response.video_metadata.size_mb;
+                        document.getElementById("video-bitrate").textContent = response.video_metadata.bit_rate_kbps;
+                        document.getElementById("video-format").textContent = response.video_metadata.format_name;
+
+                        // Сохранить текст для загрузки
+                        transcribedText = response.text;
+
+                        // Вычисляем время обработки
+                        const endTime = new Date();
+                        const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+                        document.getElementById("transcription-time").textContent = "Время транскрибации: " + timeTaken + " секунд.";
+
+                        // Показать кнопки "Скачать как .txt" и "Скопировать в буфер"
+                        document.getElementById("download-btn").style.display = "inline-block";
+                        document.getElementById("copy-btn").style.display = "inline-block";
+                    } else {
+                        alert("Ошибка: " + xhr.responseText);
+                    }
+                }
+            };
+
+            xhr.open("POST", "/", true);
+            xhr.send(formData);
+        });
+
+        // Скачивание текста как .txt
+        document.getElementById("download-btn").addEventListener("click", function () {
+            const blob = new Blob([transcribedText], { type: "text/plain;charset=utf-8" });
+            const link = document.createElement("a");
+            link.href = window.URL.createObjectURL(blob);
+            link.download = "transcription.txt";
+            link.click();
+        });
+
+        // Копирование текста в буфер обмена
+        document.getElementById("copy-btn").addEventListener("click", function () {
+            if (navigator.clipboard && transcribedText) {
+                navigator.clipboard.writeText(transcribedText)
+                    .then(() => {
+                        alert("Текст успешно скопирован в буфер обмена!");
+                    })
+                    .catch((err) => {
+                        alert("Ошибка копирования текста: " + err);
+                    });
+            } else {
+                alert("Копирование в буфер обмена не поддерживается в вашем браузере.");
+            }
+        });
+    </script>
+</body>
+</html>
